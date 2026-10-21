@@ -34,7 +34,7 @@ load_sentiment_model = function() {
     device = -1L
   )
   
-  return(model)
+  return(overall_model)
 }
 
 
@@ -107,15 +107,12 @@ get_aspect_sentiment = function(
   sentiment_score = positive - negative
   
   return(list(
-    aspect = aspect,
-    sentiment = c(
-      "negative",
-      "neutral",
-      "positive"
-    )[which.max(c(negative, neutral, positive))],
-    # negative_probability = round(negative, 4),
-    # neutral_probability = round(neutral, 4),
-    # positive_probability = round(positive, 4),
+    # aspect = aspect,
+    # sentiment = c(
+    #   "negative",
+    #   "neutral",
+    #   "positive"
+    # )[which.max(c(negative, neutral, positive))],
     sentiment_score = round(sentiment_score, 4)
   ))
 }

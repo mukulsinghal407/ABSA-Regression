@@ -40,6 +40,5 @@ setup_python()
 # ==========================================
 # Data Loader - Loading Required Data
 # ==========================================
-reviews = read.csv("./datasets/sample_test_data_set.csv")
-attribute_set = read.csv("./datasets/attributes.csv")
-attribute_set = get_attribute_dictionary(attribute_set) #Transforming from a long-form to a list.
+reviews = read.csv("./datasets/final_reviews.csv")
+attribute_set = read.csv("./datasets/final_attributes.csv")
