@@ -277,3 +277,78 @@ cosine_similarity(
 )
 
 fastTextR::ft_analogies(fasttext_model,c("fit",'look','fine'))
+
+version = 'v2'
+product_attribute_df = read.csv(paste0("./output/product_attribute_df_",version,".csv"))
+attribute_df= read.csv(paste0("./output/attribute_df_",version,".csv"))
+review_sentence_aspect = read.csv(paste0("./output/review_sentence_aspect_",version,".csv"))
+
+library(dplyr)
+library(tidyr)
+
+data_wide = attribute_df %>%
+  filter(subcategory == "protection") %>%
+  select(review_id, asin, subcategory, attribute,
+         attribute_score, attribute_coverage) %>%
+  pivot_wider(
+    id_cols = c(review_id, asin, subcategory),
+    names_from = attribute,
+    values_from = c(attribute_score, attribute_coverage),
+    names_glue = "{attribute}_{.value}"
+  )
+
+data_wide = data_wide %>%
+  mutate(across(ends_with("_score"), ~ replace_na(.x, 0)))
+
+data_wide = data_wide %>%
+  left_join(
+    review_df %>% select(review_id, rating),
+    by = "review_id"
+  )
+
+data_wide = data_wide %>%
+  select(-asin,-review_id, -subcategory)
+
+model = lm(rating ~ ., data = data_wide)
+
+summary(model)
+
+cor_matrix = data_wide %>%
+  select(where(is.numeric), -rating) %>%
+  cor(use = "pairwise.complete.obs")
+
+View(round(cor_matrix, 3))
+
+data_wide_1 = attribute_df %>%
+  filter(subcategory == "cables") %>%
+  select(review_id, asin, subcategory, attribute,
+         attribute_score, attribute_coverage) %>%
+  pivot_wider(
+    id_cols = c(review_id, asin, subcategory),
+    names_from = attribute,
+    values_from = c(attribute_score, attribute_coverage),
+    names_glue = "{attribute}_{.value}"
+  )
+
+data_wide_1 = data_wide_1 %>%
+  mutate(across(ends_with("_score"), ~ replace_na(.x, 0)))
+
+data_wide_1 = data_wide_1 %>%
+  left_join(
+    review_df %>% select(review_id, rating),
+    by = "review_id"
+  )
+
+data_wide_1 = data_wide_1 %>%
+  select(-asin,-review_id, -subcategory)
+
+model1 = lm(rating ~ ., data = data_wide_1)
+
+summary(model1)
+
+cor_matrix1 = data_wide_1 %>%
+  select(where(is.numeric), -rating) %>%
+  cor(use = "pairwise.complete.obs")
+
+write.csv(round(cor_matrix1, 3),file = "./corr.csv")
+
