@@ -1,8 +1,8 @@
 # Report Notes – Methodology, System Architecture, Results & Analysis
 
 All numbers below come from the `_v2` outputs in `./output` (latest full run) and `datasets/final_reviews.csv`.
-Subcategory regression is reproduced by `processing/subcategory_regression.R`; results saved to
-`output/subcategory_regression_summary_v2.csv` and `output/subcategory_regression_coefficients_v2.csv`.
+Subcategory regression is reproduced by `processing/subcategory_regression.R`; `summary(model)` of the 2 selected
+models saved to `output/subcategory_regression_top2_v2.txt`.
 
 ---
 
@@ -121,14 +121,15 @@ flowchart TD
     - `attribute_coverage` = attribute_count / total_sentence_count (share of review devoted to the attribute)
 11. **Product-level aggregation** – per product × attribute: mean sentiment, # positive / neutral / negative reviews,
     total reviews.
-12. **Subcategory regression** (one OLS per subcategory, 22 models):
+12. **Subcategory regression** (one OLS per subcategory; 22 fitted, best 2 reported):
 
     rating = β0 + Σ_a β_a·score_a + Σ_a γ_a·coverage_a + ε
 
     - dependent: user star rating (1–5)
     - independents: score and coverage for every attribute belonging to that subcategory
-    - unmentioned attribute → score = 0 (neutral), coverage = 0; attributes never mentioned in a subcategory dropped
+    - unmentioned attribute → score = 0 (neutral), coverage = 0; every dictionary attribute kept, even with zero detections (lm reports NA)
     - fit: R², adjusted R², F-test; coefficient t-tests at α = 0.05
+    - selection: average of rank(adj R²) and rank(share of predictors with p < 0.05) → top 2 reported
 13. **Pooled benchmark** – rating ~ mean attribute score + # attributes discussed + total coverage + subcategory
     fixed effects (all 30,738 reviews).
 
@@ -197,80 +198,58 @@ Rating distribution by review mean attribute score:
 
 R² = 0.549, adj R² = 0.548.
 
-### 5.5 Subcategory regressions (rating ~ attribute scores + coverages)
+### 5.5 Subcategory regressions – top 2 models
 
-All 22 models significant (F-test p < 0.001).
+All 22 subcategory models are fitted; only the **2 best** are reported. Selection = trade-off of fit and significance:
+average of (rank by adjusted R²) and (rank by share of predictors significant at p < 0.05). Every dictionary attribute
+of the subcategory is included (score + coverage); none had zero detections in v2. Full `summary(model)` output:
+`output/subcategory_regression_top2_v2.txt`.
 
-| Subcategory | n | predictors | R² | adj R² | mean rating |
-|---|---|---|---|---|---|
-| computers | 627 | 14 | 0.614 | 0.606 | 4.19 |
-| specialized | 84 | 12 | 0.644 | 0.583 | 3.77 |
-| warranties | 132 | 12 | 0.611 | 0.572 | 3.94 |
-| cables | 3,149 | 14 | 0.559 | 0.558 | 4.27 |
-| peripherals | 849 | 14 | 0.558 | 0.551 | 4.18 |
-| headphones | 2,778 | 16 | 0.550 | 0.547 | 4.13 |
-| displays | 1,640 | 14 | 0.536 | 0.532 | 4.22 |
-| optics | 164 | 12 | 0.553 | 0.518 | 4.32 |
-| mobile | 1,050 | 14 | 0.520 | 0.514 | 4.32 |
-| power | 1,089 | 14 | 0.517 | 0.511 | 4.33 |
-| mounts | 962 | 12 | 0.507 | 0.500 | 4.43 |
-| protection | 6,006 | 14 | 0.496 | 0.495 | 4.37 |
-| wearables | 648 | 14 | 0.504 | 0.493 | 4.18 |
-| photography | 1,795 | 16 | 0.496 | 0.492 | 4.32 |
-| automotive | 407 | 14 | 0.504 | 0.486 | 4.06 |
-| audio | 3,222 | 14 | 0.483 | 0.481 | 4.52 |
-| security | 1,041 | 14 | 0.485 | 0.478 | 4.14 |
-| components | 663 | 14 | 0.486 | 0.475 | 4.38 |
-| networking | 850 | 14 | 0.458 | 0.449 | 4.14 |
-| media | 1,806 | 14 | 0.402 | 0.397 | 4.37 |
-| smarthome | 619 | 14 | 0.408 | 0.395 | 4.49 |
-| storage | 1,157 | 14 | 0.356 | 0.348 | 4.39 |
+| Subcategory | n | predictors | significant (p < 0.05) | R² | adj R² | F | p |
+|---|---|---|---|---|---|---|---|
+| **cables** | 3,149 | 14 | 11 / 14 | 0.5595 | 0.5575 | 284.3 | < 2.2e-16 |
+| **peripherals** | 849 | 14 | 10 / 14 | 0.5580 | 0.5506 | 75.2 | < 2.2e-16 |
 
-Coefficient summary (304 coefficients = 152 score + 152 coverage):
+**Cables** (intercept 4.289)
 
-- **Score**: 109 / 152 significant; 108 of them positive (only exception: optics/usability −0.54, n = 164).
-- **Coverage**: 68 / 152 significant; 64 negative (positive exceptions: protection/comfort, peripherals/comfort,
-  optics/usability, cables/durability).
+| Attribute | Score β | p | Coverage β | p |
+|---|---|---|---|---|
+| fit | 0.726 *** | < 2e-16 | −0.512 *** | < 2e-16 |
+| charging | 0.670 *** | < 2e-16 | −0.593 *** | < 2e-16 |
+| length | 0.262 *** | 7.45e-11 | −0.337 *** | 2.46e-09 |
+| durability | 0.218 *** | 1.32e-08 | 0.115 * | 0.021 |
+| speed | 0.184 ** | 0.002 | −0.054 | 0.537 |
+| compatibility | 0.133 ** | 0.009 | 0.044 | 0.557 |
+| connectivity | 0.131 ** | 0.007 | −0.013 | 0.845 |
 
-Key driver per subcategory (largest significant score β = rating gain moving that attribute from neutral (0) to fully positive (+1)):
+**Peripherals** (intercept 4.240)
 
-| Subcategory | Top driver(s) β |
-|---|---|
-| power | charging 1.08 |
-| peripherals / computers / mounts / mobile / displays / components | build 1.10 / 1.06 / 1.04 / 0.96 / 0.94 / 0.89 |
-| networking | setup 0.87 |
-| warranties | replacement 0.84, service 0.70 |
-| headphones | sound 0.80, durability 0.42 |
-| protection | fit 0.76, durability 0.44 |
-| cables | fit 0.73, charging 0.67 |
-| automotive | sound 0.71, display 0.58 |
-| smarthome | controls 0.70, installation 0.63 |
-| security | image 0.66, installation 0.60 |
-| storage | durability 0.64, compatibility 0.60 |
-| wearables | display 0.64, battery 0.58 |
-| media | controls 0.58, playback 0.56 |
-| optics | build 0.87, magnification 0.74 |
-| audio | build 0.65, sound 0.59 |
-| photography | build 0.63, focus 0.45 |
+| Attribute | Score β | p | Coverage β | p |
+|---|---|---|---|---|
+| build | 1.096 *** | < 2e-16 | −0.938 *** | < 2e-16 |
+| performance | 0.364 *** | 0.0002 | −0.542 ** | 0.002 |
+| battery | 0.242 ** | 0.002 | −0.110 | 0.358 |
+| controls | 0.226 * | 0.027 | −0.158 | 0.310 |
+| compatibility | 0.220 * | 0.025 | −0.401 * | 0.036 |
+| connectivity | 0.215 * | 0.044 | −0.164 | 0.382 |
+| comfort | −0.006 | 0.946 | 0.358 ** | 0.007 |
 
-(Full table: `output/subcategory_regression_coefficients_v2.csv`.)
+Signif. codes: *** p < 0.001, ** p < 0.01, * p < 0.05.
 
 ---
 
 ## 6. Analysis / Interpretation
 
-1. **Aspect sentiment explains ~35–61% of rating variance** inside each subcategory using only 12–16 text-derived
-   features — strong for noisy, 5-star-skewed review data. Highest for computers/peripherals/cables (concrete,
-   functional attributes); lowest for storage/smarthome/media (failures often unrelated to dictionary attributes,
-   e.g. dead-on-arrival, returns, seller issues).
-2. **Sentiment direction matters, as expected**: almost every significant score coefficient is positive.
+1. **Aspect sentiment explains ~56% of rating variance** in both selected subcategories (adj R² 0.558 cables,
+   0.551 peripherals) using only 14 text-derived features — strong for noisy, 5-star-skewed review data.
+2. **Sentiment direction matters, as expected**: every significant score coefficient is positive.
 3. **Coverage is negative given sentiment**: holding attribute sentiment fixed, spending a larger share of the review
-   on an attribute lowers the rating → customers elaborate on problems, not on things that just work
-   ("negativity/elaboration effect"). Consistent with the descriptive finding that rating falls as # attributes
-   discussed rises. Exceptions (comfort in protection/peripherals) = attributes praised at length.
-4. **Drivers differ by subcategory** → justifies subcategory-specific dictionaries and models: charging for power
-   banks, fit for cases/cables, sound for headphones, setup for networking, replacement/service for warranties;
-   "build" (overall build quality) is the dominant generic driver for hardware-heavy subcategories.
+   on an attribute lowers the rating (fit, charging, length in cables; build, performance, compatibility in
+   peripherals) → customers elaborate on problems, not on things that just work. Consistent with the descriptive
+   finding that rating falls as # attributes discussed rises. Exceptions: comfort (peripherals) and durability
+   (cables) – praised at length.
+4. **Drivers differ by subcategory** → justifies subcategory-specific dictionaries and models: fit and charging
+   dominate cables; build quality dominates peripherals (β 1.10 – largest effect in either model).
 5. **Managerial view** (`product_attribute_df_v2`): per product × attribute counts of positive/neutral/negative
    reviews pinpoint concrete defects (e.g. a security camera with 36/45 negative mentions on one attribute) that
    a star average would hide.

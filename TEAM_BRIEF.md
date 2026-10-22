@@ -197,7 +197,7 @@ For each product × feature: average feeling, number of positive / neutral / neg
 → Lets a manager see e.g. "this camera: 36 of 45 reviews negative on detection".
 
 ### Step 7 – Statistics: what drives the star rating?
-One regression **per product type** (22 models):
+One regression **per product type** (22 run; the best 2 reported):
 
 ```mermaid
 flowchart LR
@@ -211,6 +211,8 @@ flowchart LR
 - **Outcome (dependent):** customer's star rating.
 - **Inputs (independent):** feeling score + coverage for each feature of that product type.
 - Gives: how much each feature moves the stars (β), whether it's reliable (p-value), how much is explained overall (R²).
+- Every feature of the product type is included, even one never detected.
+- The 2 product types with the best balance of explained share (adjusted R²) and number of reliable effects (p < 0.05) are reported.
 - Plus one **overall model** across all reviews as a benchmark.
 
 ---
@@ -254,48 +256,52 @@ xychart-beta
   bar [4.60, 4.41, 4.30, 4.21, 4.14, 4.10, 3.98, 3.85]
 ```
 
-### 5.5 Regression – how well features explain stars
-- **All 22 models statistically significant.**
-- Explained share of star rating (R²): **35% (storage) → 61% (computers)**, average **~50%**.
+### 5.5 Regression – the 2 strongest product types
+We ran one regression per product type (22), then kept the **2 with the best balance of "explains the most"
+(adjusted R²) and "most features with reliable effects" (p < 0.05)**. Winners: **cables** and **keyboards & mice
+(peripherals)**. Full R output: `output/subcategory_regression_top2_v2.txt`.
+
+| Product type | Reviews | Explained (adj R²) | Reliable effects |
+|---|---|---|---|
+| Cables | 3,149 | 56% | 11 of 14 |
+| Keyboards & mice (peripherals) | 849 | 55% | 10 of 14 |
+
+- Both models statistically significant (p < 0.001).
 - Overall model (all reviews): R² **55%**; average feeling coefficient **+1.29 stars**.
 
-| Product type | Explained (adj R²) |
-|---|---|
-| Computers | 61% |
-| Cables | 56% |
-| Headphones | 55% |
-| Displays | 53% |
-| Phone cases / protection | 50% |
-| Audio | 48% |
-| Smart home | 40% |
-| Storage | 35% |
+### 5.6 What moves the stars (stars gained, neutral → fully positive feeling)
+**Cables**
 
-### 5.6 Top driver per product type
-| Product type | Feature that moves stars most | Effect (stars, neutral → fully positive) |
+| Feature | Feeling effect | More-talk effect (coverage) |
 |---|---|---|
-| Power banks / chargers | Charging | +1.08 |
-| Keyboards & mice | Build | +1.10 |
-| Computers | Build | +1.06 |
-| Mounts | Build | +1.04 |
-| Phones | Build | +0.96 |
-| Networking | Setup | +0.87 |
-| Warranties | Replacement | +0.84 |
-| Headphones | Sound | +0.80 |
-| Phone cases | Fit | +0.76 |
-| Cables | Fit | +0.73 |
-| Smart home | Controls | +0.70 |
-| Security cameras | Image | +0.66 |
-| Storage | Durability | +0.64 |
-| Smartwatches | Display | +0.64 |
+| Fit | +0.73 | −0.51 |
+| Charging | +0.67 | −0.59 |
+| Length | +0.26 | −0.34 |
+| Durability | +0.22 | +0.11 |
+| Speed | +0.18 | not reliable |
+| Compatibility | +0.13 | not reliable |
+| Connectivity | +0.13 | not reliable |
+
+**Keyboards & mice (peripherals)**
+
+| Feature | Feeling effect | More-talk effect (coverage) |
+|---|---|---|
+| Build quality | +1.10 | −0.94 |
+| Performance | +0.36 | −0.54 |
+| Battery | +0.24 | not reliable |
+| Controls | +0.23 | not reliable |
+| Compatibility | +0.22 | −0.40 |
+| Connectivity | +0.22 | not reliable |
+| Comfort | not reliable | +0.36 |
 
 ---
 
 ## 6. Analysis – what it means (suggested wording)
 
-1. **Feature feelings explain about half of why customers give the stars they do** — using only what they wrote. The rest is things like delivery, price, seller issues, or defects not tied to a listed feature.
-2. **Positive feelings raise stars, almost without exception** — 108 of 109 reliable feeling effects are positive. This shows the method is measuring something real.
-3. **Writing more about a feature = bad news.** Holding the feeling constant, the more of a review is spent on a feature, the lower the stars (64 of 68 reliable coverage effects are negative). Unhappy customers explain in detail; happy ones say "works great". Exception: **comfort** — people praise comfort at length.
-4. **Every product type has different priorities** — charging for power banks, fit for cases, sound for headphones, setup for routers. One general model would miss this; per-type models catch it.
+1. **Feature feelings explain about 56% of why customers give the stars they do** in both product types — using only what they wrote. The rest is things like delivery, price, seller issues, or defects not tied to a listed feature.
+2. **Positive feelings raise stars** — every reliable feeling effect is positive. This shows the method is measuring something real.
+3. **Writing more about a feature = bad news.** Holding the feeling constant, the more of a review is spent on a feature, the lower the stars (fit, charging, length for cables; build, performance for keyboards & mice). Unhappy customers explain in detail; happy ones say "works great". Exceptions: **comfort** and **durability** — praised at length.
+4. **Each product type has different priorities** — fit and charging for cables, build quality for keyboards & mice. Per-type models catch this.
 5. **Practical use:** sellers can target the one feature that moves their stars most; shoppers get per-feature score cards instead of one average.
 
 ---
@@ -323,13 +329,12 @@ xychart-beta
 | `processing/text_processing.R` | Sentence split, exact feature matching |
 | `processing/semantic_matching.R` | Similar-word matching (fastText) |
 | `models/bert_sentiments.R` | AI feeling score (DeBERTa) |
-| `processing/subcategory_regression.R` | Regression per product type |
+| `processing/subcategory_regression.R` | Regression per product type, picks top 2 |
 | `processing/visualizations.R` | Charts |
 | `datasets/final_reviews.csv` | Input reviews |
 | `datasets/final_attributes.csv` | Feature dictionary |
 | `output/review_sentence_aspect_v2.csv` | Sentence-level results |
 | `output/attribute_df_v2.csv` | Review × feature results |
 | `output/product_attribute_df_v2.csv` | Product × feature score card |
-| `output/subcategory_regression_summary_v2.csv` | Regression fit per product type |
-| `output/subcategory_regression_coefficients_v2.csv` | Every feature's effect |
+| `output/subcategory_regression_top2_v2.txt` | R regression output for the top 2 product types |
 | `output/graphs/` | Charts |

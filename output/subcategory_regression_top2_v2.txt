@@ -1,0 +1,70 @@
+==========================================
+Subcategory: cables 
+==========================================
+
+Call:
+lm(formula = rating ~ ., data = data_wide)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-3.9436 -0.4040  0.1746  0.5079  3.9585 
+
+Coefficients:
+                                 Estimate Std. Error t value Pr(>|t|)    
+(Intercept)                       4.28922    0.03010 142.518  < 2e-16 ***
+charging_attribute_score          0.66957    0.03614  18.529  < 2e-16 ***
+compatibility_attribute_score     0.13310    0.05066   2.627  0.00865 ** 
+connectivity_attribute_score      0.13090    0.04811   2.721  0.00655 ** 
+durability_attribute_score        0.21786    0.03823   5.699 1.32e-08 ***
+fit_attribute_score               0.72621    0.03385  21.455  < 2e-16 ***
+length_attribute_score            0.26245    0.04017   6.534 7.45e-11 ***
+speed_attribute_score             0.18388    0.05933   3.099  0.00196 ** 
+charging_attribute_coverage      -0.59327    0.04684 -12.667  < 2e-16 ***
+compatibility_attribute_coverage  0.04408    0.07512   0.587  0.55737    
+connectivity_attribute_coverage  -0.01297    0.06631  -0.196  0.84500    
+durability_attribute_coverage     0.11482    0.04967   2.312  0.02085 *  
+fit_attribute_coverage           -0.51212    0.04467 -11.466  < 2e-16 ***
+length_attribute_coverage        -0.33731    0.05639  -5.981 2.46e-09 ***
+speed_attribute_coverage         -0.05397    0.08732  -0.618  0.53654    
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 0.9071 on 3134 degrees of freedom
+Multiple R-squared:  0.5595,	Adjusted R-squared:  0.5575 
+F-statistic: 284.3 on 14 and 3134 DF,  p-value: < 2.2e-16
+
+==========================================
+Subcategory: peripherals 
+==========================================
+
+Call:
+lm(formula = rating ~ ., data = data_wide)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-3.7972 -0.3577  0.1356  0.6137  3.6416 
+
+Coefficients:
+                                  Estimate Std. Error t value Pr(>|t|)    
+(Intercept)                       4.240255   0.056983  74.413  < 2e-16 ***
+battery_attribute_score           0.241536   0.077116   3.132  0.00180 ** 
+build_attribute_score             1.096079   0.062567  17.519  < 2e-16 ***
+comfort_attribute_score          -0.006283   0.093068  -0.068  0.94620    
+compatibility_attribute_score     0.219725   0.097876   2.245  0.02503 *  
+connectivity_attribute_score      0.215307   0.106712   2.018  0.04395 *  
+controls_attribute_score          0.225637   0.101750   2.218  0.02685 *  
+performance_attribute_score       0.364460   0.095681   3.809  0.00015 ***
+battery_attribute_coverage       -0.109632   0.119262  -0.919  0.35823    
+build_attribute_coverage         -0.938037   0.091592 -10.241  < 2e-16 ***
+comfort_attribute_coverage        0.358322   0.133153   2.691  0.00727 ** 
+compatibility_attribute_coverage -0.400717   0.191059  -2.097  0.03626 *  
+connectivity_attribute_coverage  -0.163969   0.187307  -0.875  0.38161    
+controls_attribute_coverage      -0.158214   0.155609  -1.017  0.30957    
+performance_attribute_coverage   -0.542052   0.171092  -3.168  0.00159 ** 
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 0.9132 on 834 degrees of freedom
+Multiple R-squared:  0.558,	Adjusted R-squared:  0.5506 
+F-statistic:  75.2 on 14 and 834 DF,  p-value: < 2.2e-16
+
