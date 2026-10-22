@@ -1,119 +1,55 @@
 # ==========================================
 # Subcategory-Level Regression
 #
-# For each subcategory:
-#   rating ~ <attribute>_attribute_score + <attribute>_attribute_coverage  (EVERY attribute of that subcategory)
-# attribute_score    = mean (P(positive) - P(negative)) over sentences mentioning the attribute; 0 if not mentioned
-# attribute_coverage = sentences mentioning the attribute / total sentences in review
-#
-# All 22 models are fitted in memory; only summary(model) of the 2 best is written to ./output.
-# Selection = trade-off of fit and significance at 5%:
-#   rank of adjusted R² + rank of share of predictors with p < 0.05, averaged -> lowest 2 selected
-# Attributes with zero detections are kept; lm() reports NA for them (no variation to estimate an effect).
-# Requires: review_df, attribute_df, attribute_set (from main.R) or the v2 CSVs
+# For each subcategory in REGRESSION_SUBCATEGORIES:
+#   rating ~ <attribute>_attribute_score + <attribute>_attribute_coverage
+# Unmentioned attribute -> score 0 (neutral); coverage is already 0
 # ==========================================
 
-library(dplyr)
-library(tidyr)
+fit_subcategory_model = function(attribute_df, review_df, subcategoryName) {
 
-SIGNIFICANCE_LEVEL = 0.05
-TOP_N_MODELS = 2
-
-fit_subcategory_model = function(model_df, subcategoryName) {
-
-  subcategory_attributes = sort(unique(
-    attribute_set$aspect[attribute_set$subcategory == subcategoryName]
-  ))
-
-  data = model_df %>%
-    filter(subcategory == subcategoryName)
-
-  # Every dictionary attribute of the subcategory, even if never detected
-  data_wide = data %>%
-    select(review_id, rating) %>%
-    distinct() %>%
-    crossing(attribute = subcategory_attributes) %>%
-    left_join(
-      data %>% select(review_id, attribute, attribute_score, attribute_coverage),
-      by = c("review_id", "attribute")
-    ) %>%
-    mutate(
-      attribute_score = coalesce(attribute_score, 0),
-      attribute_coverage = coalesce(attribute_coverage, 0)
-    ) %>%
+  data_wide = attribute_df %>%
+    filter(subcategory == subcategoryName) %>%
+    select(review_id, asin, subcategory, attribute,
+           attribute_score, attribute_coverage) %>%
     pivot_wider(
+      id_cols = c(review_id, asin, subcategory),
       names_from = attribute,
       values_from = c(attribute_score, attribute_coverage),
       names_glue = "{attribute}_{.value}"
     ) %>%
-    select(-review_id)
+    mutate(across(ends_with("_score"), ~ replace_na(.x, 0))) %>%
+    left_join(
+      review_df %>% select(review_id, rating),
+      by = "review_id"
+    ) %>%
+    select(-asin, -review_id, -subcategory)
 
   model = lm(rating ~ ., data = data_wide)
 
   return(model)
 }
 
-get_selection_table = function(models) {
+run_subcategory_regression = function(attribute_df, review_df) {
 
-  data.frame(
-    subcategory = names(models),
-    adj_r2 = sapply(models, function(m) summary(m)$adj.r.squared),
-    significant_share = sapply(models, function(m) {
-      p_values = summary(m)$coefficients[-1, 4]
-      sum(p_values < SIGNIFICANCE_LEVEL) / (length(coef(m)) - 1)
-    })
-  ) %>%
-    mutate(
-      selection_score = (rank(-adj_r2) + rank(-significant_share)) / 2
-    ) %>%
-    arrange(selection_score, desc(adj_r2))
+  models = list()
+
+  for (sc in REGRESSION_SUBCATEGORIES) {
+
+    models[[sc]] = fit_subcategory_model(attribute_df, review_df, sc)
+
+    logger("==========================================\n")
+    logger(paste("Subcategory:", sc, "\n"))
+    logger("==========================================\n")
+    print(summary(models[[sc]]))
+
+    # Multicollinearity check: pairwise correlation of predictors
+    cor_matrix = models[[sc]]$model %>%
+      select(-rating) %>%
+      cor(use = "pairwise.complete.obs")
+
+    print(round(cor_matrix, 3))
+  }
+
+  return(models)
 }
-
-if (!exists("attribute_df")) {
-  attribute_df = read.csv("./output/attribute_df_v2.csv")
-}
-
-if (!exists("review_df")) {
-  review_df = read.csv("./datasets/final_reviews.csv") %>%
-    mutate(review_id = row_number())
-}
-
-if (!exists("attribute_set")) {
-  attribute_set = read.csv("./datasets/final_attributes.csv")
-}
-
-model_df = attribute_df %>%
-  left_join(review_df %>% select(review_id, rating), by = "review_id")
-
-subcategories = sort(unique(model_df$subcategory))
-
-models = lapply(subcategories, function(sc) fit_subcategory_model(model_df, sc))
-names(models) = subcategories
-
-selected = head(get_selection_table(models)$subcategory, TOP_N_MODELS)
-
-options(width = 1000)
-sink("./output/subcategory_regression_top2_v2.txt")
-for (sc in selected) {
-  cat("==========================================\n")
-  cat("Subcategory:", sc, "\n")
-  cat("==========================================\n")
-  print(summary(models[[sc]]))
-
-  # Pairwise correlation of predictors - multicollinearity check
-  cor_matrix = models[[sc]]$model %>%
-    select(where(is.numeric), -rating) %>%
-    cor(use = "pairwise.complete.obs")
-
-  cat("\nPairwise correlation of predictors:\n\n")
-  print(round(cor_matrix, 3))
-
-  cor_pairs = which(upper.tri(cor_matrix), arr.ind = TRUE)
-  max_pair = cor_pairs[which.max(abs(cor_matrix[cor_pairs])), ]
-  cat(
-    "\nHighest absolute correlation:",
-    rownames(cor_matrix)[max_pair[1]], "vs", colnames(cor_matrix)[max_pair[2]],
-    "=", round(cor_matrix[max_pair[1], max_pair[2]], 3), "\n\n"
-  )
-}
-sink()

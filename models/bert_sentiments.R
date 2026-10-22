@@ -1,7 +1,6 @@
 # ------------------------------------------
 # 1. Load pretrained Models
 # ------------------------------------------
-
 load_deberta_model = function() {
   
   transformers = reticulate::import("transformers")
@@ -25,23 +24,9 @@ load_deberta_model = function() {
   ))
 }
 
-load_sentiment_model = function() {
-  
-  transformers = reticulate::import("transformers")
-  overall_model = transformers$pipeline(
-    task = "sentiment-analysis",
-    model = "cardiffnlp/twitter-roberta-base-sentiment-latest",
-    device = -1L
-  )
-  
-  return(overall_model)
-}
-
-
 # ------------------------------------------
 # 2. Aspect sentiment classification
 # ------------------------------------------
-
 get_aspect_sentiment = function(
     sentence,
     aspect,
@@ -106,13 +91,5 @@ get_aspect_sentiment = function(
   
   sentiment_score = positive - negative
   
-  return(list(
-    # aspect = aspect,
-    # sentiment = c(
-    #   "negative",
-    #   "neutral",
-    #   "positive"
-    # )[which.max(c(negative, neutral, positive))],
-    sentiment_score = round(sentiment_score, 4)
-  ))
+  return(round(sentiment_score, 4))
 }

@@ -1,20 +1,30 @@
-bar_number_of_reviews_per_aspect = function(){
-  # Total number of reviews
-  total_reviews = nrow(review_df)
-  
+# ==========================================
+# Visualisations (ggplot2)
+# Every function takes one subcategory, e.g. "protection"
+# Uses review_df, attribute_df, product_attribute_df from main.R
+# Saves PNGs to ./output/graphs (file name ends with the subcategory)
+# ==========================================
+
+bar_number_of_reviews_per_aspect = function(subcategoryName){
+  # Total number of reviews in the subcategory
+  total_reviews = sum(review_df$subcategory == subcategoryName)
+
   # Calculate attribute frequency
   attribute_frequency = attribute_df %>%
-    filter(attribute_count > 0) %>%
+    filter(
+      subcategory == subcategoryName,
+      attribute_count > 0
+    ) %>%
     group_by(attribute) %>%
     summarise(
-      review_count = n_distinct(asin),
+      review_count = n_distinct(review_id),
       .groups = "drop"
     ) %>%
     mutate(
       percentage = round(review_count / total_reviews * 100, 1)
     ) %>%
     arrange(desc(review_count))
-  
+
   # Visualization
   bar_plot = ggplot(
     attribute_frequency,
@@ -26,31 +36,36 @@ bar_number_of_reviews_per_aspect = function(){
     geom_col(fill = "steelblue") +
     geom_text(
       aes(label = paste0(review_count, " (", percentage, "%)")),
-      hjust = -0.1,
+      hjust = 1.1,
+      colour = "white",
       size = 3.5
     ) +
     coord_flip() +
-    scale_y_continuous(
-      limits = c(0, total_reviews * 1.15)
-    ) +
     labs(
-      title = "Number of Reviews Discussing Each Attribute",
+      title = paste("Number of Reviews Discussing Each Attribute:", subcategoryName),
       subtitle = paste("Total Reviews:", total_reviews),
       x = "Attribute",
       y = "Number of Reviews",
-      caption = "Percentages represent the share of total reviews mentioning each attribute."
+      caption = "Percentages represent the share of the subcategory's reviews mentioning each attribute."
     ) +
     theme_minimal()
-  
+
   print(bar_plot)
-  
-  ggsave("./output/graphs/bar_number_of_reviews_per_aspect.png")
+
+  ggsave(
+    filename = paste0("./output/graphs/bar_number_of_reviews_per_aspect_", subcategoryName, ".png"),
+    plot = bar_plot,
+    width = 10,
+    height = 6,
+    units = "in"
+  )
 }
 
-bar_attribute_sentiment_summary = function(){
+bar_attribute_sentiment_summary = function(subcategoryName){
   # Prepare sentiment data
   sentiment_data = attribute_df %>%
     filter(
+      subcategory == subcategoryName,
       attribute_count > 0,
       !is.na(attribute_score),
       attribute_score != 0
@@ -67,13 +82,8 @@ bar_attribute_sentiment_summary = function(){
       avg_score = mean(attribute_score),
       review_count = n_distinct(review_id),
       .groups = "drop"
-    ) %>%
-    complete(
-      attribute = names(attribute_set),
-      sentiment_type = c("Positive", "Negative"),
-      fill = list(review_count = 0)
     )
-  
+
   # Create visualization
   sentiment_plot = ggplot(
     sentiment_data,
@@ -89,13 +99,10 @@ bar_attribute_sentiment_summary = function(){
         label = paste0(
           round(avg_score, 2),
           " (n=", review_count, ")"
-        )
+        ),
+        hjust = ifelse(avg_score > 0, 1.1, -0.1)
       ),
-      hjust = ifelse(
-        sentiment_data$avg_score > 0,
-        -0.1,
-        1.1
-      ),
+      colour = "white",
       size = 3.5
     ) +
     coord_flip() +
@@ -105,93 +112,41 @@ bar_attribute_sentiment_summary = function(){
         "Negative" = "tomato"
       )
     ) +
-    scale_y_continuous(
-      breaks = seq(-1, 1, 0.25),
-      expand = expansion(mult = 0.15)
-    ) +
     labs(
-      title = "Positive and Negative Sentiment by Attribute",
+      title = paste("Positive and Negative Sentiment by Attribute:", subcategoryName),
       subtitle = "Average sentiment scores and number of reviews",
       x = "Attribute",
       y = "Average Sentiment Score",
-      fill = "Sentiment",
-      caption = "Attributes without bars have no detected non-neutral sentiment."
+      fill = "Sentiment"
     ) +
     theme_minimal()
-  
-  # Display in RStudio Plots tab
-  print(sentiment_plot)
-  ggsave(
-    "./output/graphs/bar_attribute_sentiment_summary.png",
-    width = 12,
-    height = 7,
-    units = "in",
-    )
-}
 
-box_attribute_sentiment_by_rating = function(){
-  rating_sentiment_data = attribute_df %>%
-    filter(
-      attribute_count > 0,
-      !is.na(attribute_score)
-    ) %>%
-    left_join(
-      review_df %>%
-        select(review_id, rating = user_rating),
-      by = "review_id"
-    ) %>%
-    filter(!is.na(rating))
-  
-  rating_sentiment_plot = ggplot(
-    rating_sentiment_data,
-    aes(
-      x = factor(rating),
-      y = attribute_score
-    )
-  ) +
-    geom_boxplot(
-      fill = "steelblue",
-      alpha = 0.7,
-      na.rm = TRUE
-    ) +
-    facet_wrap(
-      ~ attribute,
-      ncol = 3
-    ) +
-    scale_y_continuous(
-      limits = c(-1, 1),
-      breaks = seq(-1, 1, 0.5)
-    ) +
-    labs(
-      title = "Attribute Sentiment Across Customer Ratings",
-      subtitle = "Distribution of attribute sentiment scores by star rating",
-      x = "Customer Rating",
-      y = "Attribute Sentiment Score"
-    ) +
-    theme_minimal()
-  
-  print(rating_sentiment_plot)
-  
+  print(sentiment_plot)
+
   ggsave(
-    filename = "./output/graphs/box_attribute_sentiment_by_rating.png",
-    plot = rating_sentiment_plot,
-    width = 12,
-    height = 9,
+    filename = paste0("./output/graphs/bar_attribute_sentiment_summary_", subcategoryName, ".png"),
+    plot = sentiment_plot,
+    width = 11,
+    height = 6,
     units = "in"
   )
 }
 
-bar_attributes_discussed_per_review = function(){
+bar_attributes_discussed_per_review = function(subcategoryName){
   # Count attributes discussed in each review
   review_attribute_count = attribute_df %>%
+    filter(subcategory == subcategoryName) %>%
     group_by(review_id) %>%
     summarise(
       attributes_discussed = sum(attribute_count > 0, na.rm = TRUE),
       .groups = "drop"
     )
-  
-  # Include all reviews, even those without attribute records
-  review_attribute_count = review_df %>%
+
+  # Include all reviews of the subcategory, even those without attribute records
+  subcategory_reviews = review_df %>%
+    filter(subcategory == subcategoryName)
+
+  review_attribute_count = subcategory_reviews %>%
     select(review_id) %>%
     left_join(
       review_attribute_count,
@@ -200,8 +155,8 @@ bar_attributes_discussed_per_review = function(){
     mutate(
       attributes_discussed = coalesce(attributes_discussed, 0L)
     )
-  
-  # Count reviews for each level of attribute coverage
+
+  # Count reviews for each number of attributes discussed
   attribute_distribution = review_attribute_count %>%
     count(attributes_discussed, name = "review_count") %>%
     mutate(
@@ -209,7 +164,7 @@ bar_attributes_discussed_per_review = function(){
         review_count / sum(review_count) * 100, 1
       )
     )
-  
+
   coverage_plot = ggplot(
     attribute_distribution,
     aes(
@@ -227,52 +182,54 @@ bar_attributes_discussed_per_review = function(){
           review_count, " (", percentage, "%)"
         )
       ),
-      vjust = -0.5,
+      vjust = 1.5,
+      colour = "white",
       size = 3.5
     ) +
-    scale_y_continuous(
-      expand = expansion(mult = c(0, 0.15))
-    ) +
     labs(
-      title = "Number of Attributes Discussed per Review",
+      title = paste("Number of Attributes Discussed per Review:", subcategoryName),
       subtitle = paste(
-        "Total Reviews:", nrow(review_df)
+        "Total Reviews:", nrow(subcategory_reviews)
       ),
       x = "Number of Attributes Discussed",
       y = "Number of Reviews",
-      caption = "Percentages represent the share of total reviews."
+      caption = "Percentages represent the share of the subcategory's reviews."
     ) +
     theme_minimal()
-  
+
   print(coverage_plot)
-  
+
   ggsave(
-    filename = "./output/graphs/bar_attributes_discussed_per_review.png",
+    filename = paste0("./output/graphs/bar_attributes_discussed_per_review_", subcategoryName, ".png"),
     plot = coverage_plot,
     width = 11,
     height = 7,
-    units = "in",
+    units = "in"
   )
 }
 
-bar_attributes_discussed_vs_rating = function(){
+bar_attributes_discussed_vs_rating = function(subcategoryName){
   # Count attributes discussed in each review
   review_attribute_count = attribute_df %>%
+    filter(subcategory == subcategoryName) %>%
     group_by(review_id) %>%
     summarise(
       attributes_discussed = sum(attribute_count > 0, na.rm = TRUE),
       .groups = "drop"
     )
-  
-  # Join attribute counts with customer ratings
-  rating_coverage_data = review_attribute_count %>%
+
+  # Join attribute counts with customer ratings (all reviews, 0 if none detected)
+  rating_coverage_data = review_df %>%
+    filter(subcategory == subcategoryName) %>%
+    select(review_id, rating) %>%
     left_join(
-      review_df %>%
-        select(review_id, rating=user_rating),
+      review_attribute_count,
       by = "review_id"
     ) %>%
-    filter(!is.na(rating))
-  
+    mutate(
+      attributes_discussed = coalesce(attributes_discussed, 0L)
+    )
+
   # Calculate average rating
   rating_coverage_summary = rating_coverage_data %>%
     group_by(attributes_discussed) %>%
@@ -280,41 +237,186 @@ bar_attributes_discussed_vs_rating = function(){
       avg_rating = mean(rating),
       review_count = n(),
       .groups = "drop"
+    ) %>%
+    mutate(
+      group_label = paste0(attributes_discussed, "\n(n=", review_count, ")"),
+      group_label = factor(group_label, levels = group_label)
     )
-  
+
   rating_coverage_plot = ggplot(
     rating_coverage_summary,
     aes(
-      x = factor(attributes_discussed),
+      x = group_label,
       y = avg_rating
     )
   ) +
-    geom_col(
-      fill = "steelblue",
-      width = 0.7
+    geom_line(
+      aes(group = 1),
+      colour = "steelblue",
+      linewidth = 1
     ) +
-    geom_text(
-      aes(
-        label = paste0(
-          round(avg_rating, 2),
-          " (n=", review_count, ")"
-        )
-      ),
-      vjust = -0.5,
-      size = 3.5
-    ) +
-    scale_y_continuous(
-      limits = c(0, 5.5),
-      breaks = 0:5
+    geom_point(
+      colour = "steelblue",
+      size = 3
     ) +
     labs(
-      title = "Average Customer Rating by Number of Attributes Discussed",
+      title = paste("Average Customer Rating by Number of Attributes Discussed:", subcategoryName),
       subtitle = "Relationship between attribute coverage and customer ratings",
       x = "Number of Attributes Discussed",
       y = "Average Customer Rating",
-      caption = "n = Number of reviews in each group"
+      caption = "n = number of reviews in each group"
     ) +
     theme_minimal()
-  
+
   print(rating_coverage_plot)
+
+  ggsave(
+    filename = paste0("./output/graphs/bar_attributes_discussed_vs_rating_", subcategoryName, ".png"),
+    plot = rating_coverage_plot,
+    width = 11,
+    height = 7,
+    units = "in"
+  )
+}
+
+bar_distinct_products_per_subcategory = function(subcategoryName){
+  # Number of distinct products whose reviews discuss each attribute
+  products_per_attribute = product_attribute_df %>%
+    filter(
+      subcategory == subcategoryName,
+      total_attribute_reviews > 0
+    ) %>%
+    group_by(attribute) %>%
+    summarise(
+      distinct_products = n_distinct(product_asin),
+      .groups = "drop"
+    )
+
+  total_products = n_distinct(
+    product_attribute_df$product_asin[product_attribute_df$subcategory == subcategoryName]
+  )
+
+  products_plot = ggplot(
+    products_per_attribute,
+    aes(
+      x = reorder(attribute, distinct_products),
+      y = distinct_products
+    )
+  ) +
+    geom_col(fill = "steelblue", width = 0.7) +
+    geom_text(
+      aes(label = distinct_products),
+      hjust = 1.2,
+      colour = "white",
+      size = 3.5
+    ) +
+    coord_flip() +
+    labs(
+      title = paste("Distinct Products Discussed per Attribute:", subcategoryName),
+      subtitle = paste("Total Products:", total_products),
+      x = "Attribute",
+      y = "Number of Distinct Products"
+    ) +
+    theme_pander()
+
+  print(products_plot)
+
+  ggsave(
+    filename = paste0("./output/graphs/bar_distinct_products_per_subcategory_", subcategoryName, ".png"),
+    plot = products_plot,
+    width = 10,
+    height = 6,
+    units = "in"
+  )
+}
+
+bar_rating_by_mention_status = function(subcategoryName){
+  # Average rating when an attribute is not mentioned, mentioned positively, or mentioned negatively
+  mention_data = attribute_df %>%
+    filter(subcategory == subcategoryName) %>%
+    left_join(
+      review_df %>%
+        select(review_id, rating),
+      by = "review_id"
+    ) %>%
+    mutate(
+      mention_status = case_when(
+        attribute_count == 0 ~ "Not mentioned",
+        attribute_score > 0 ~ "Mentioned positive",
+        TRUE ~ "Mentioned negative"
+      ),
+      mention_status = factor(
+        mention_status,
+        levels = c("Mentioned negative", "Not mentioned", "Mentioned positive")
+      )
+    ) %>%
+    group_by(attribute, mention_status) %>%
+    summarise(
+      avg_rating = mean(rating),
+      review_count = n(),
+      .groups = "drop"
+    )
+
+  # Neutral reference: the subcategory's overall average rating
+  subcategory_average = mean(
+    review_df$rating[review_df$subcategory == subcategoryName]
+  )
+
+  mention_plot = ggplot(
+    mention_data,
+    aes(
+      x = attribute,
+      y = avg_rating,
+      fill = mention_status
+    )
+  ) +
+    geom_col(
+      position = position_dodge(width = 0.8),
+      width = 0.75
+    ) +
+    geom_text(
+      aes(label = paste0(round(avg_rating, 2), "\n(n=", review_count, ")")),
+      position = position_dodge(width = 0.8),
+      vjust = 1.3,
+      colour = "white",
+      size = 2.8
+    ) +
+    geom_hline(
+      aes(
+        yintercept = subcategory_average,
+        linetype = paste0("Subcategory average rating (", round(subcategory_average, 2), ")")
+      ),
+      colour = "grey20",
+      linewidth = 0.8
+    ) +
+    scale_fill_manual(
+      values = c(
+        "Mentioned negative" = "tomato",
+        "Not mentioned" = "grey60",
+        "Mentioned positive" = "steelblue"
+      )
+    ) +
+    scale_linetype_manual(
+      values = "dashed"
+    ) +
+    labs(
+      title = paste("Average Rating When an Attribute Is Not Mentioned vs Mentioned:", subcategoryName),
+      subtitle = "Not mentioning an attribute leaves the rating at the subcategory average (neutral); a negative mention costs about two stars",
+      x = "Attribute",
+      y = "Average Customer Rating",
+      fill = "Attribute in review",
+      linetype = NULL
+    ) +
+    theme_minimal() +
+    theme(legend.position = "top")
+
+  print(mention_plot)
+
+  ggsave(
+    filename = paste0("./output/graphs/bar_rating_by_mention_status_", subcategoryName, ".png"),
+    plot = mention_plot,
+    width = 12,
+    height = 7,
+    units = "in"
+  )
 }

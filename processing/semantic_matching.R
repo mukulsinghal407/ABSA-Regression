@@ -90,7 +90,7 @@ build_fasttext_cache = function(
   # 3. Generate 300d embeddings
   vectors = lapply(terms, function(term) {
     
-    if (grepl(" ", term, fixed = TRUE)>1) {
+    if (grepl(" ", term, fixed = TRUE)) {
       
       vector = fastTextR::ft_sentence_vectors(
         model = fasttext_model,
@@ -184,82 +184,6 @@ get_subcategory_vectors = function(
   ))
 }
 
-get_fasttext_similarities = function(
-    candidate,
-    fasttext_model,
-    subcategory_cache
-) {
-  
-  # Get embedding for a word or phrase
-  if (grepl(" ", candidate, fixed = TRUE)) {
-    
-    candidate_vector = fastTextR::ft_sentence_vectors(
-      model = fasttext_model,
-      sentences = candidate
-    )
-    
-  } else {
-    
-    candidate_vector = fastTextR::ft_word_vectors(
-      model = fasttext_model,
-      words = candidate
-    )
-  }
-  
-  candidate_vector = as.numeric(candidate_vector)
-  
-  # Normalize candidate embedding
-  norm = sqrt(sum(candidate_vector^2))
-  
-  if (!is.finite(norm) || norm == 0) {
-    return(NULL)
-  }
-  
-  candidate_vector = candidate_vector / norm
-  
-  # Compare against cached dictionary vectors
-  similarities = as.numeric(
-    subcategory_cache$vectors %*% candidate_vector
-  )
-  
-  return(data.frame(
-    candidate = candidate,
-    term = rownames(subcategory_cache$vectors),
-    similarity = similarities
-  ))
-}
-
-generate_candidate_ngrams = function(
-    sentence,
-    max_n = 2
-) {
-  
-  words = strsplit(
-    tolower(sentence),
-    "[^[:alnum:]']+"
-  )[[1]]
-  
-  words = words[nzchar(words)]
-  
-  candidates = character()
-  
-  for (n in seq_len(min(max_n, length(words)))) {
-    
-    for (i in seq_len(length(words) - n + 1)) {
-      
-      phrase = paste(
-        words[i:(i + n - 1)],
-        collapse = " "
-      )
-      
-      candidates = c(candidates, phrase)
-    }
-  }
-  
-  return(unique(candidates))
-}
-
-
 # ==========================================
 # Precompute Subcategory Caches
 # ==========================================
@@ -269,7 +193,6 @@ build_subcategory_caches = function(fasttext_cache) {
   subcategories = unique(
     fasttext_cache$dictionary$subcategory
   )
-  print(subcategories)
   
   subcategory_caches = lapply(
     subcategories,
