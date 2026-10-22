@@ -69429,3 +69429,44 @@
 [  INFO  ] 2026-10-21 12:51:49.563816   Loading existing neighbour mapping cache 
 [  INFO  ] 2026-10-21 14:10:34.733523   Loading existing fastText cache 
 [  INFO  ] 2026-10-21 14:10:34.737214   Loading existing neighbour mapping cache 
+[  INFO  ] 2026-10-22 17:19:29.736219   Loading existing version:  2 outputs; skipping ABSA pipeline 
+[  INFO  ] 2026-10-22 17:19:36.132335   Subcategory regression started 
+[  INFO  ] 2026-10-22 17:19:37.986555   ==========================================
+ 
+[  INFO  ] 2026-10-22 17:19:37.986844   Subcategory: cables 
+ 
+[  INFO  ] 2026-10-22 17:19:37.987018   ==========================================
+ 
+[  INFO  ] 2026-10-22 17:19:38.010445   ==========================================
+ 
+[  INFO  ] 2026-10-22 17:19:38.010742   Subcategory: peripherals 
+ 
+[  INFO  ] 2026-10-22 17:19:38.010909   ==========================================
+ 
+[  INFO  ] 2026-10-22 17:19:50.838259   Visualisations started 
+[  INFO  ] 2026-10-22 17:24:04.56119   Visualisations started 
+[  INFO  ] 2026-10-22 17:56:43.121363   Loading existing fastText cache 
+[  INFO  ] 2026-10-22 17:56:43.17303   Loading existing neighbour mapping cache 
+[  INFO  ] 2026-10-22 17:57:07.80067   Subcategory regression started 
+[  INFO  ] 2026-10-22 17:57:10.963963   ==========================================
+ 
+[  INFO  ] 2026-10-22 17:57:10.964289   Subcategory: cables 
+ 
+[  INFO  ] 2026-10-22 17:57:10.964484   ==========================================
+ 
+[  INFO  ] 2026-10-22 17:57:43.743896   Visualisations started 
+[  INFO  ] 2026-10-22 18:00:23.439084   Loading existing version:  2 outputs; skipping ABSA pipeline 
+[  INFO  ] 2026-10-22 18:00:27.431843   Subcategory regression started 
+[  INFO  ] 2026-10-22 18:00:28.640893   ==========================================
+ 
+[  INFO  ] 2026-10-22 18:00:28.641283   Subcategory: cables 
+ 
+[  INFO  ] 2026-10-22 18:00:28.641518   ==========================================
+ 
+[  INFO  ] 2026-10-22 18:00:28.734876   ==========================================
+ 
+[  INFO  ] 2026-10-22 18:00:28.735221   Subcategory: peripherals 
+ 
+[  INFO  ] 2026-10-22 18:00:28.735394   ==========================================
+ 
+[  INFO  ] 2026-10-22 18:00:33.929019   Visualisations started 
