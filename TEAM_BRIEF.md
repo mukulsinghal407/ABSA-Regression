@@ -267,6 +267,7 @@ We ran one regression per product type (22), then kept the **2 with the best bal
 | Keyboards & mice (peripherals) | 849 | 55% | 10 of 14 |
 
 - Both models statistically significant (p < 0.001).
+- **Overlap check (multicollinearity):** no two inputs move together too closely — highest correlation 0.53 (cables) and 0.68 (keyboards & mice), below the usual 0.7–0.8 warning level. So each feature's effect can be read on its own.
 - Overall model (all reviews): R² **55%**; average feeling coefficient **+1.29 stars**.
 
 ### 5.6 What moves the stars (stars gained, neutral → fully positive feeling)

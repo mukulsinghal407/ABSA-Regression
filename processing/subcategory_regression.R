@@ -92,11 +92,28 @@ names(models) = subcategories
 
 selected = head(get_selection_table(models)$subcategory, TOP_N_MODELS)
 
+options(width = 1000)
 sink("./output/subcategory_regression_top2_v2.txt")
 for (sc in selected) {
   cat("==========================================\n")
   cat("Subcategory:", sc, "\n")
   cat("==========================================\n")
   print(summary(models[[sc]]))
+
+  # Pairwise correlation of predictors - multicollinearity check
+  cor_matrix = models[[sc]]$model %>%
+    select(where(is.numeric), -rating) %>%
+    cor(use = "pairwise.complete.obs")
+
+  cat("\nPairwise correlation of predictors:\n\n")
+  print(round(cor_matrix, 3))
+
+  cor_pairs = which(upper.tri(cor_matrix), arr.ind = TRUE)
+  max_pair = cor_pairs[which.max(abs(cor_matrix[cor_pairs])), ]
+  cat(
+    "\nHighest absolute correlation:",
+    rownames(cor_matrix)[max_pair[1]], "vs", colnames(cor_matrix)[max_pair[2]],
+    "=", round(cor_matrix[max_pair[1], max_pair[2]], 3), "\n\n"
+  )
 }
 sink()

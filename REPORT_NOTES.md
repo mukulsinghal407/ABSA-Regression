@@ -236,6 +236,16 @@ of the subcategory is included (score + coverage); none had zero detections in v
 
 Signif. codes: *** p < 0.001, ** p < 0.01, * p < 0.05.
 
+**Multicollinearity check** (pairwise Pearson correlation of all 14 predictors, full matrices in the same txt file):
+
+| Subcategory | Highest |r| | Pair |
+|---|---|---|
+| cables | 0.530 | charging_attribute_score vs fit_attribute_score |
+| peripherals | 0.677 | comfort_attribute_score vs comfort_attribute_coverage |
+
+All pairwise |r| < 0.7 (common rule-of-thumb threshold 0.7–0.8) → no serious multicollinearity; coefficients
+can be interpreted individually.
+
 ---
 
 ## 6. Analysis / Interpretation
