@@ -50,3 +50,5 @@ po/*~
 rsconnect/
 
 embeddings/
+# macOS Finder metadata
+.DS_Store
