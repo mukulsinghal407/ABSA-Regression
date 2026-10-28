@@ -1,233 +1,177 @@
-# Aspect Detection and Aspect-Based Sentiment Analysis (ABSA)
+# Aspect-Based Sentiment Analysis (ABSA) of Amazon Electronics Reviews
 
 ## Project objective
 
-Identify product aspects discussed in customer reviews and determine the sentiment toward **each aspect**, rather than assigning one sentiment to the entire review.
+A star rating tells you **how** satisfied a customer is, not **why**. This project reads Amazon Electronics reviews, detects which product attributes (aspects) each review discusses — battery, sound, fit, build quality, … — scores the sentiment toward **each attribute separately**, and then measures which attributes drive the star rating within a product subcategory.
 
-The design preserves complete sentences and their order. It avoids clause-cutting and short extracted fragments because those can discard sentiment-bearing context (for example, identifying only `the battery` rather than `the battery drains incredibly quickly`).
+Attributes are defined per subcategory (what matters for headphones is not what matters for phone cases), and whole sentences are kept intact so sentiment-bearing context such as negation and contrast is not lost.
 
-## Final proposed architecture
+## Architecture
+
+![System architecture](output/graphs/report/D1_system_architecture.png)
+
+![Workflow](output/graphs/report/D2_workflow.png)
 
 ```mermaid
 flowchart TD
-    A[Raw product review] --> B[Clean text and split into ordered sentences in R]
-    B --> C[Aspect candidate detection]
-    D[attributes.csv: aspect labels and synonyms] --> C
-    E[100d GloVe: semantic similarity] --> C
-    C --> F{Any aspect candidates?}
-    F -- No --> G[Record no detected aspect]
-    F -- Yes --> H[Create overlapping ordered sentence windows]
-    B --> H
-    H --> I[Select windows relevant to each detected aspect]
-    I --> J[Send full window + target aspect to pretrained DeBERTa]
-    J --> K[Aspect-specific sentiment predictions and scores]
-    K --> L[Deduplicate overlapping evidence and aggregate by review + aspect]
-    L --> M[Final aspect, sentiment, confidence, evidence]
+    A[final_reviews.csv] --> B[R: split title + text into ordered sentences]
+    B --> C[R: lexical match against attribute dictionary]
+    B --> D[R: fastText 300d semantic match]
+    E[final_attributes.csv: subcategory, aspect, aspect_term] --> C
+    E --> D
+    F[cc.en.300.bin] --> D
+    C --> G[Detected aspects per sentence]
+    D --> G
+    G --> H[Context window: previous + current + next sentence of the same review]
+    H --> I[Pretrained DeBERTa ABSA model via reticulate]
+    I --> J[Sentence-level score = P positive - P negative]
+    J --> K[R: aggregate per review and attribute: score + coverage]
+    K --> L[R: product-level attribute summary]
+    K --> M[R: rating ~ attribute scores + coverage, per subcategory]
+    K --> N[R: visualisations]
 ```
 
-## Why this design?
+## How it works
 
-- **Dictionary + GloVe for aspect detection:** The dictionary catches explicit names and known synonyms; GloVe expands coverage to semantically related language. GloVe is not a sentiment classifier and cosine similarity alone does not prove that an aspect is present.
-- **Whole sentences instead of clause fragments:** Preserve negation, comparisons, modifiers, and causal explanations.
-- **Overlapping sentence windows:** A review may mention an aspect more than once; its sentiment may span adjacent sentences. Sliding windows preserve discourse context while staying within the model's token budget.
-- **Aspect-specific DeBERTa:** The same window may contain several aspects with different sentiment. Run inference separately for each target aspect.
-- **Evidence-aware aggregation:** Overlapping windows can repeat the same evidence; deduplicate or weight evidence before producing a review-level aspect label.
+### 1. Text preparation (R)
 
-## Processing stages
+Each review gets a `review_id`. Title and text are concatenated, invalid UTF-8 is dropped, and the result is split into ordered sentences with `tokenizers::tokenize_sentences`. HTML tags and extra whitespace are removed; negation and contrast words are kept.
 
-### 1. Input and text preparation (R)
+### 2. Aspect detection (R)
 
-Input fields should include a stable `review_id` and `review_text`. Preserve the original text. Normalize whitespace conservatively, split into ordered sentences, and retain `sentence_id` and character offsets where feasible. Do not remove negation or contrast words such as *but*, *however*, and *whereas*.
+`datasets/final_attributes.csv` maps each subcategory to its aspects and the terms customers use for them (e.g. `protection, fit, snug fit`). For every sentence, only the aspects of that review's subcategory are considered.
 
-### 2. Aspect candidate detection (R)
+- **Lexical:** sentence n-grams (up to the longest dictionary phrase) are matched against aspect names and aspect terms.
+- **Semantic:** remaining words (minus stop words and generic words listed in `FASTTEXT_IGNORE_WORDS`) are compared to the dictionary using cosine similarity of pretrained **fastText `cc.en.300.bin`** (300-dimensional) vectors. A word is assigned to an aspect when similarity is at least `0.30` and beats the next-best aspect by a margin of at least `0.05` (set in `main.R`). Nearest-neighbour terms of each aspect are also pre-computed.
 
-Read `attributes.csv` into an aspect-to-terms mapping. For each sentence, compare text with each aspect label and its known terms using case-insensitive, word-boundary-aware matching. For terms not matched directly, use pretrained 100-dimensional GloVe word vectors and cosine similarity to propose semantically related mentions. For multiword phrases, define a consistent pooling method and test it on held-out examples.
+Dictionary vectors and neighbour mappings are cached in `embeddings/*.rds` so they are computed only once.
 
-Candidate output:
+```mermaid
+flowchart TD
+  A[Ordered review sentences] --> B[n-gram dictionary match]
+  A --> C[fastText 300d cosine similarity]
+  D[Subcategory aspects and terms] --> B
+  D --> C
+  E[cc.en.300.bin vectors] --> C
+  C --> F{similarity >= 0.30 and margin >= 0.05?}
+  F -->|Yes| G[Semantic aspect]
+  F -->|No| H[Discard]
+  B --> I[Union of detected aspects]
+  G --> I
+```
 
-| review_id | sentence_id | aspect | detection_method | similarity |
-|---|---:|---|---|---:|
-| R001 | 2 | battery | dictionary | NA |
-| R001 | 3 | camera | GloVe | 0.78 |
+### 3. Aspect-specific sentiment (Python model, called from R)
 
-**Important:** The similarity value above is illustrative, not a recommended threshold. Tune thresholds against manually annotated reviews and retain the exact matched term/evidence. Avoid treating every high-similarity word as an aspect mention.
-
-### 3. Ordered sliding windows (R)
-
-Create windows over the ordered sentences, e.g. 2 or 3 consecutive sentences with a stride of 1 sentence. Keep the entire original sentence text in each window, not extracted fragments. Associate a window with an aspect when a candidate mention occurs in that window; optionally include neighboring windows when they add relevant context. If a window exceeds the pretrained model's token budget, shrink it at sentence boundaries or apply tokenizer-aware truncation. A token is **not** a fixed number of characters.
-
-Example:
+For every detected aspect, the sentence plus its previous and next sentence (only when they belong to the same review) is sent with the aspect name to the pretrained DeBERTa ABSA model [`sy12ssss/absa-deberta-v3`](https://huggingface.co/sy12ssss/absa-deberta-v3). The model is used for inference only — no training. Its negative / neutral / positive probabilities become a score:
 
 ```text
-S1: The screen is beautiful.
-S2: I have to charge it three times a day.
-S3: It barely lasts until lunch.
-S4: The camera, however, is excellent.
-
-Window 1: S1 + S2
-Window 2: S2 + S3
-Window 3: S3 + S4
+sentiment_score = P(positive) - P(negative)     # range -1 to +1
 ```
 
-The second window preserves context for the battery issue, even if one sentence uses an indirect reference (`it`). Candidate detection may still miss implicit mentions; this is an evaluation target, not a solved problem.
+### 4. Aggregation (R)
 
-### 4. Aspect-specific sentiment inference
+- **Review × attribute** (`attribute_df`): `attribute_score` is the mean sentence score, `attribute_count` the number of sentences mentioning the attribute, and `attribute_coverage = attribute_count / total sentences in the review`.
+- **Product × attribute** (`product_attribute_df`): mean sentiment plus counts of positive, neutral and negative reviews per product (`asin`) and attribute.
 
-For each `(review_id, window_id, aspect)` candidate, send the **full window text** and **target aspect** to the pretrained DeBERTa ABSA model using the model's documented input template. Obtain its negative, neutral, and positive scores (where supported). Never assume that a generic sentiment classifier is aspect-conditioned; confirm the chosen model supports the task.
+### 5. Regression and visualisations (R)
 
-Illustrative record:
+For each subcategory in `REGRESSION_SUBCATEGORIES` (currently `cables` and `peripherals`), an OLS model is fitted:
 
 ```text
-window_text: "I have to charge it three times a day. It barely lasts until lunch."
-aspect: battery
-predicted_sentiment: negative
+rating ~ <attribute>_attribute_score + <attribute>_attribute_coverage   (for every attribute of the subcategory)
 ```
 
-### 5. Aggregation (R)
+Unmentioned attributes get score 0 (neutral) and coverage 0. A pairwise correlation matrix of the predictors is printed as a multicollinearity check. Plots are written to `output/graphs/`.
 
-A review may discuss the same aspect in several nonadjacent sentences. Retain all relevant evidence, group predictions by `(review_id, aspect)`, and account for duplicate sentences across overlapping windows. Possible policies include selecting the strongest independent evidence, averaging deduplicated class probabilities, or reporting `mixed` when independent positive and negative evidence coexist. Choose and validate one policy before deployment.
+## Repository layout
 
-Recommended output fields:
-
-| Field | Meaning |
+| Path | Purpose |
 |---|---|
-| `review_id` | Source review identifier |
-| `aspect` | Canonical aspect name |
-| `sentiment` | Positive / neutral / negative / mixed (if supported by aggregation) |
-| `confidence` | Calibrated or clearly labeled model-derived score |
-| `evidence_sentence_ids` | Source sentences supporting the result |
-| `evidence_text` | Original evidence text |
-| `detection_method` | Dictionary, GloVe, or both |
+| `main.R` | Entry point: runs the full pipeline |
+| `constants.R` | Required R packages / Python modules, model ID, fastText paths, regression subcategories |
+| `setup.R` | Installs and loads R packages, selects the Python env, loads datasets |
+| `utils.R` | Logger, review/sentence/attribute data frame builders, text cleaning |
+| `models/bert_sentiments.R` | Loads DeBERTa and scores a sentence for one aspect |
+| `processing/text_processing.R` | Sentence splitting, n-grams, lexical detection |
+| `processing/semantic_matching.R` | fastText loading, caching and semantic detection |
+| `processing/subcategory_regression.R` | Per-subcategory regression |
+| `processing/visualizations.R` | Exploratory plots |
+| `datasets/` | `final_reviews.csv` (30,740 reviews) and `final_attributes.csv` (attribute dictionary) |
+| `embeddings/` | fastText model and caches — **not in git, see Setup** |
+| `output/` | Pipeline outputs (`*_v2.csv`) and graphs |
 
-## Implementation responsibility and course restriction
+## Setup
 
-| Component | Language / approach |
-|---|---|
-| Text preprocessing and sentence splitting | R |
-| Read and manage `attributes.csv` | R |
-| Dictionary matching | R |
-| 100d GloVe similarity | R |
-| Sliding-window generation | R |
-| Candidate filtering and aggregation | R |
-| Pretrained DeBERTa model inference | Python **only if explicitly permitted by the instructor** |
+### 1. R
 
-**Course constraint:** All work must be in R except use of pretrained BERT from Python. Since the chosen model is **DeBERTa**, a BERT-family architecture but not literally the original BERT model, confirm that pretrained DeBERTa is permitted under the exception. If not, substitute an instructor-approved pretrained BERT model or an R-compatible inference route; do not assume the exception covers arbitrary Python code. Without the course restriction, a fully Python-based transformer inference and preprocessing pipeline would be a viable alternative, but it is deliberately not recommended here.
+R packages are listed in `REQUIRED_PACKAGES` in `constants.R`; `setup.R` installs any that are missing and loads them.
 
-## Minimal R-oriented pseudocode
+### 2. Python
 
-The following is a **pipeline outline**, not a runnable implementation; each function must be implemented and tested. Assignment uses `=` per course convention.
+The DeBERTa model runs in Python through `reticulate`. You need a **virtualenv named `absa-env`** that `reticulate::use_virtualenv("absa-env")` can find, with these modules installed:
+
+- `torch`
+- `numpy`
+- `transformers`
+
+`setup.R` checks these on **every** run and stops if any is missing — including the quick run below.
+
+### 3. Downloads (not included in the repository)
+
+The `embeddings/` folder is gitignored, so it does not exist in a fresh clone.
+
+1. Create the folder in the project root:
+   ```bash
+   mkdir embeddings
+   ```
+2. Download the English fastText vectors from the [fastText website](https://fasttext.cc/docs/en/crawl-vectors.html) — `cc.en.300.bin.gz` (about 4.5 GB):
+   ```bash
+   curl -O https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.en.300.bin.gz
+   ```
+3. Unzip it into `embeddings/` (about 7.2 GB on disk):
+   ```bash
+   gunzip cc.en.300.bin.gz && mv cc.en.300.bin embeddings/
+   ```
+   The path must match `FASTTEXT_PATH = "./embeddings/cc.en.300.bin"`. The model is loaded fully into memory, so make sure you have enough free RAM.
+
+You do **not** need to download:
+
+- `embeddings/fasttext_dictionary_cache.rds` and `embeddings/fasttext_neightbour_mapping_cache.rds` — these are built automatically on the first full run. If you edit `final_attributes.csv`, delete both files so they are rebuilt.
+- The DeBERTa model — `transformers` downloads `sy12ssss/absa-deberta-v3` from Hugging Face on the first full run (internet required).
+
+### 4. Working directory
+
+`main.R` starts with a hard-coded `setwd("~/Downloads/NUS/Semester 1/Big Data/capstone project")`. Change this path to wherever you cloned the repository before running.
+
+## Running
+
+### Quick run — use the committed outputs
+
+The `output/*_v2.csv` files are committed. When they exist, `main.R` loads them and skips aspect detection and sentiment inference, going straight to the regression and visualisations. This does **not** need the fastText file or the DeBERTa download, but it still needs the R packages and the `absa-env` Python environment.
 
 ```r
-reviews = read.csv("reviews.csv", stringsAsFactors = FALSE)
-attributes = read.csv("attributes.csv", stringsAsFactors = FALSE)
-
-sentences = split_ordered_sentences(reviews)
-aspect_candidates = detect_aspects(sentences, attributes, glove_vectors)
-windows = build_sentence_windows(sentences, window_size = 3, stride = 1)
-model_inputs = link_aspects_to_windows(windows, aspect_candidates)
-
-# Inference adapter calls only the instructor-approved pretrained model.
-predictions = predict_aspect_sentiment(model_inputs)
-results = aggregate_deduplicated_evidence(predictions)
+source("main.R")
 ```
 
-## Validation plan
+### Full run — recompute everything
 
-1. **Aspect detection:** Annotate a sample with explicit, synonymous, and implicit aspect mentions. Report precision, recall, and F1 for dictionary-only versus dictionary + GloVe.
-2. **Window coverage:** Measure how often the sentiment-bearing context falls inside the selected windows. Compare 1-, 2-, and 3-sentence windows and different strides.
-3. **Sentiment classification:** Report per-class precision, recall, F1, and confusion matrix at the `(review, aspect)` level.
-4. **Failure cases:** Check negation, contrast, multiple aspects in one sentence, pronouns, implicit mentions, long reviews, and mixed sentiment.
-5. **Ablation:** Compare sentence-only, sliding-window, and full-review inference on the same annotated sample.
+Complete all Setup steps, then increase `version` in `main.R` (e.g. `version = 3`). Since no `*_v3.csv` outputs exist yet, the full ABSA pipeline runs and writes new versioned outputs to `output/`.
 
-## Open implementation decisions
-
-- Exact format and completeness of `attributes.csv`.
-- GloVe similarity method and empirically tuned threshold.
-- Sentence splitter and model-tokenizer handling.
-- Window size, stride, and maximum token budget.
-- Exact aspect-conditioned DeBERTa checkpoint and approved Python scope.
-- Deduplication, confidence calibration, and mixed-sentiment policy.
-
-**Status:** This README describes the agreed **proposed design**. It does not claim that thresholds, model compatibility, or evaluation results have already been verified.
-
-## Reference diagrams (embedded)
-
-### Complete ABSA pipeline
-
-```mermaid
-flowchart TD
- A[Raw review] --> B[R: Clean and split into ordered sentences]
- B --> C[R: Detect candidate aspects]
- D[attributes.csv] --> C
- E[100d GloVe] --> C
- C --> F{Aspect candidate detected?}
- F -->|No| G[Record no detected aspect]
- F -->|Yes| H[R: Locate evidence sentence IDs]
- B --> I[R: Construct overlapping ordered sentence windows]
- H --> J[R: Select relevant windows per aspect]
- I --> J
- J --> K[Pretrained aspect-conditioned DeBERTa inference]
- K --> L[R: Deduplicate overlapping evidence]
- L --> M[R: Aggregate per review and aspect]
- M --> N[Aspect, sentiment, confidence, evidence]
+```r
+source("main.R")
 ```
 
-### Aspect detection (R)
+The full run loops over every sentence and calls DeBERTa once per detected aspect, so expect it to take a long time.
 
-```mermaid
-flowchart TD
-  A[Ordered review sentences] --> B[Dictionary match against attributes.csv]
-  A --> C[GloVe 100d semantic candidate matching]
-  D[Canonical aspects and synonyms] --> B
-  E[Pretrained word vectors] --> C
-  B --> F[Merge candidates per sentence and aspect]
-  C --> F
-  F --> G[Record matched term, method, similarity, sentence ID]
-  G --> H{Candidate credible under validated rules?}
-  H -->|Yes| I[Pass aspect and sentence position to window selector]
-  H -->|No| J[Discard candidate]
-```
+## Outputs
 
-Dictionary and GloVe identify candidate aspect mentions, not sentiment. Semantic thresholds must be validated.
+| File | Grain | Contents |
+|---|---|---|
+| `output/review_sentence_aspect_v<N>.csv` | One row per sentence | `review_id`, `subcategory`, `asin`, `sentence`, and one column per aspect holding the sentence's sentiment score (empty if not mentioned) |
+| `output/attribute_df_v<N>.csv` | Review × attribute | `attribute_score`, `attribute_count`, `attribute_coverage` |
+| `output/product_attribute_df_v<N>.csv` | Product × attribute | Mean `sentiment`, total product reviews, reviews mentioning the attribute, and positive / neutral / negative review counts |
+| `output/graphs/` | — | Exploratory and report figures |
 
-### Ordered overlapping sliding windows (R)
+## Course constraint
 
-```mermaid
-flowchart TD
- A[Review split into S1, S2, S3, S4] --> B[Choose window size = 2 sentences and stride = 1]
- B --> W1[W1 = S1 + S2]
- B --> W2[W2 = S2 + S3]
- B --> W3[W3 = S3 + S4]
- C[Detected aspect and sentence IDs] --> D[Select windows containing relevant mention]
- W1 --> D
- W2 --> D
- W3 --> D
- D --> E[Keep full ordered sentences and aspect label]
- E --> F[Check model tokenizer token limit]
- F --> G[Aspect-specific model inputs]
-```
-
-Overlapping windows may repeat evidence; aggregation must account for duplicate sentence IDs. Window size and stride are examples, not fixed hyperparameters.
-
-### Aspect-conditioned inference and aggregation
-
-```mermaid
-flowchart TD
- A[Selected review window] --> C[Prepare model input: complete window + target aspect]
- B[Target aspect: e.g. battery] --> C
- C --> D[Pretrained aspect-conditioned DeBERTa model]
- D --> E[Per-window positive / neutral / negative scores]
- E --> F[Group by review ID and aspect]
- F --> G[Identify repeated sentence evidence across overlapping windows]
- G --> H[Deduplicate or weight overlapping evidence]
- H --> I[Aggregate independent evidence]
- I --> J{Conflicting positive and negative evidence?}
- J -->|Yes| K[Consider mixed sentiment if policy supports it]
- J -->|No| L[Select validated sentiment label]
- K --> M[Review-level aspect result with evidence]
- L --> M
-```
-
-Confirm the pretrained model is actually aspect-conditioned; a generic sentiment model is insufficient. Validate aggregation policy and confidence interpretation.
-
-All diagrams are embedded in this README as Mermaid blocks; no separate diagram files are required.
+All work is done in R, except use of a pretrained BERT-family model from Python (via `reticulate`). The chosen model is DeBERTa, which is BERT-family rather than the original BERT, so confirm it is covered by this exception. Python is used only to load the pretrained model and run inference; all preprocessing, detection, aggregation, regression and plotting are in R.
